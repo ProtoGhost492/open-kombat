@@ -1,0 +1,32 @@
+# Unreal build output and caches
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+Backup/
+.vs/
+*.sln
+*.slnx
+*.suo
+*.VC.db
+*.opendb
+UpgradeLog.htm
+
+# Content is Epic's Third Person template (the default map and game mode). It isn't ours to publish;
+# add it from the template instead (see README).
+Content/
+
+# Never commit anything from the game: OpenKombat reads it from your own MKKE install at run time.
+OpenKombatData/
+*.xxx
+*.upk
+*.tfc
+*.mko
+*.fsb
+*.fev
+*.bik
+*.bin
+*.dds
+*.png
+*.wav
+*.ogg
