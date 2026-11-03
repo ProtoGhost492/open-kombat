@@ -7,6 +7,22 @@ need your own copy of the game.
 
 It's a fan project, not affiliated with or endorsed by Warner Bros. Games or NetherRealm Studios.
 
+## Long-term goals
+
+MKKE comes first, but the aim is a single engine that runs the whole NetherRealm Studios series on PC from each
+player's own copy:
+
+* **Mortal Kombat (2011) / Komplete Edition**: the current target.
+* **Injustice: Gods Among Us (Ultimate Edition)**, built on the same technology as MK 2011.
+* **Mortal Kombat X / XL**.
+* **Injustice 2**.
+* **Mortal Kombat 11** and later games, as far as their formats allow.
+
+That shapes how the code is written. Readers for packages, scripts, animation, sound and cinemas are kept apart from
+game rules, so each game can add its own formats and natives. Where OpenKombat can do something more simply than
+the original engine without changing how it plays, it does, so the same code can serve later games. Each game will
+still need its own native-function table and per-game fixes. Contributions toward any game in the series are welcome.
+
 ## What works
 
 Fights between any two of the roster on the game's stages, driven by the game's scripts. That covers walking,
@@ -46,3 +62,8 @@ scripts inputs for tests.
 * Match the code around you. Comments mark how a fact is known: `[obs]` observed in the game's code, `[inf]`
   inferred, `[unk]` unknown, `[design]` OpenKombat's own choice.
 * Warnings C4458 and C4459 are errors in this module.
+
+## License
+
+OpenKombat's code is under the [MIT License](LICENSE), and so are contributions to it. The license covers only
+OpenKombat's own code. The games, their files and their names belong to their owners.
