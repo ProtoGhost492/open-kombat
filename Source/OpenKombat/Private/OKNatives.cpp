@@ -4833,6 +4833,23 @@ namespace
 	}
 
 	/**
+	 * The end of ResolveHit, for hits and blocks alike. FUN_008AB040 gives the victim the attack's hit-stun override
+	 * (+0xE4) as its breakout frame (+0x771C, which ani_to_breakout_frame_x plays to instead of the reaction's own
+	 * frame when it's set) and the attack's +0x00 at +0x7720; the reaction's exit clears both. Then ApplyReaction's
+	 * FUN_00446B60(victim, 0x4600): the victim is reacting. The 0x200 and 0x4000 bits keep CanAct, CanMove and
+	 * CanBlock false, so no button or command starts a move until the reaction's script leaves it (its breakout ends
+	 * in exit_to_stance, which sets the stance state).
+	 */
+	void EnterReactionState(FOKScriptRuntime& Runtime, const FOKFighter& Attacker, FOKFighter& Victim)
+	{
+		const uint32 Attack = Attacker.Handle + FOKFighter::LiveAttack;
+		WriteWord(Runtime, Victim.Handle + 0x771C, ReadWord(Runtime, Attack + OKAttack::HitStunOverride));
+		WriteWord(Runtime, Victim.Handle + 0x7720, ReadWord(Runtime, Attack));
+		WriteWord(Runtime, Victim.Handle + FOKFighter::PreviousState, ReadWord(Runtime, Victim.Handle + FOKFighter::State));
+		WriteWord(Runtime, Victim.Handle + FOKFighter::State, 0x4600);
+	}
+
+	/**
 	 * A blocked hit (ResolveHit step 8, FUN_0089E980 and ApplyReaction with blocked set): the victim takes the attack's chip
 	 * damage (+0xD0) and a BlockingDucking reaction by the attack's strength bits (+0xE8 & 0x0FFE0000), its side counts the
 	 * block (player +0xBD8), and the contact ends blocked (outcome 1). The combo doesn't count it and the attacker gains no
@@ -4871,6 +4888,7 @@ namespace
 		const int32 Function = Blocking ? Blocking->File->FindFunctionByName(Reaction) : INDEX_NONE;
 		if (Function != INDEX_NONE)
 		{
+			EnterReactionState(Runtime, Attacker, Victim);
 			XferToReaction(Runtime, Victim, *Blocking, Function);
 		}
 		return true;
@@ -6175,6 +6193,7 @@ void OKResolveContact(FOKScriptRuntime& Runtime, FOKFighter& Attacker, FOKFighte
 		UE_LOG(LogOKVM, Log, TEXT("frame %lld: %s reacts with %s.%s%s, health %g"), Runtime.GetSimFrame(), *Victim.Name,
 			*Target->File->GetName().Replace(TEXT(".mko"), TEXT("")), *Target->File->GetFunctions()[Function].Name,
 			bAir ? (AirReaction != 0 ? TEXT(" (in the air)") : TEXT(" (in the air, no airborne reaction)")) : TEXT(""), Victim.Health);
+		EnterReactionState(Runtime, Attacker, Victim);
 		XferToReaction(Runtime, Victim, *Target, Function);
 	}
 }
