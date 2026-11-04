@@ -98,3 +98,30 @@ private:
 	int64 Pos = 0;
 	bool bError = false;
 };
+
+/** Helpers the mesh readers share. */
+namespace OKBytes
+{
+	/** A packed tangent component: a byte mapped to [-1, 1]. */
+	inline float Unpack(uint8 Byte)
+	{
+		return Byte / 127.5f - 1.0f;
+	}
+
+	inline FVector3f UnpackVector(const uint8* Bytes)
+	{
+		return FVector3f(Unpack(Bytes[0]), Unpack(Bytes[1]), Unpack(Bytes[2]));
+	}
+
+	/** Reads an int32 count and checks it against a limit and the bytes left (each element at least MinBytes). */
+	inline int32 ReadCount(FOKByteReader& R, int32 Limit, int32 MinBytes, bool& bBad)
+	{
+		const int32 Count = R.I32();
+		if (Count < 0 || Count > Limit || int64(Count) * MinBytes > R.Remaining())
+		{
+			bBad = true;
+			return 0;
+		}
+		return Count;
+	}
+}

@@ -79,14 +79,21 @@ bool FOKMkoFile::ReadCString(int64 Offset, FString& Out) const
 
 bool FOKMkoFile::Load(const FString& Path, FString& OutError)
 {
-	*this = FOKMkoFile();	// start clean if this object is reused
-	Name = FPaths::GetCleanFilename(Path);	// NEW
-
-	if (!FFileHelper::LoadFileToArray(Bytes, *Path))
+	TArray<uint8> FileBytes;
+	if (!FFileHelper::LoadFileToArray(FileBytes, *Path))
 	{
+		*this = FOKMkoFile();
 		OutError = TEXT("can't read the file");
 		return false;
 	}
+	return LoadFromBytes(MoveTemp(FileBytes), FPaths::GetCleanFilename(Path), OutError);
+}
+
+bool FOKMkoFile::LoadFromBytes(TArray<uint8>&& InBytes, const FString& FileName, FString& OutError)
+{
+	*this = FOKMkoFile();	// start clean if this object is reused
+	Name = FileName;
+	Bytes = MoveTemp(InBytes);
 
 	// Header: 16 little-endian dwords.
 	for (int32 i = 0; i < 16; ++i)
@@ -241,7 +248,7 @@ bool FOKMkoFile::Load(const FString& Path, FString& OutError)
 	if (Bytes.Num() != ExpectedSize)
 	{
 		UE_LOG(LogOKScript, Warning, TEXT("%s: sections end at %lld, so the file should be %lld bytes, but it is %d"),
-				*Path, End, ExpectedSize, Bytes.Num());
+				*Name, End, ExpectedSize, Bytes.Num());
 	}
 
 	Functions.Reserve(NumFunctions);
@@ -541,12 +548,11 @@ bool FOKMkoFile::Disassemble(int32 FuncIndex, const FOKNativeNames* NativeNames,
 static TAutoConsoleVariable<FString> CVarMkoDir(
 	TEXT("ok.MkoDir"),
 	TEXT(""),
-	TEXT("Folder holding the extracted .mko scripts; empty means <Documents>/OpenKombatData/mko."));
+	TEXT("A folder of extracted .mko scripts to load instead of the game's packages; empty reads the packages."));
 
 FString FOKMkoFile::ScriptDir()
 {
-	const FString Dir = CVarMkoDir.GetValueOnGameThread();
-	return Dir.IsEmpty() ? FPaths::Combine(FPlatformProcess::UserDir(), TEXT("OpenKombatData/mko")) : Dir;
+	return CVarMkoDir.GetValueOnGameThread();
 }
 
 static FAutoConsoleCommand CmdMkoList(

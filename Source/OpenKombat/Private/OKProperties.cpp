@@ -208,3 +208,21 @@ TArray<int32> FOKPropertyList::ReadIntArray(const FOKProperty& Array)
 	}
 	return Out;
 }
+
+bool OKProps::ReadObject(FOKPackage& Package, int32 Ref, FOKPropertyList& Out)
+{
+	const TArray<FOKPackageExport>& Exports = Package.GetExports();
+	TArray<uint8> Bytes;
+	if (!Exports.IsValidIndex(Ref - 1) || !Package.ExportData(Exports[Ref - 1], Bytes))
+	{
+		return false;
+	}
+	FOKByteReader Reader(Bytes);
+	if (Out.Read(Reader, Package.GetNames()))
+	{
+		return true;
+	}
+	Out = FOKPropertyList();
+	FOKByteReader Skipped(TConstArrayView<uint8>(Bytes).Slice(FMath::Min(4, Bytes.Num()), FMath::Max(0, Bytes.Num() - 4)));
+	return Out.Read(Skipped, Package.GetNames());
+}

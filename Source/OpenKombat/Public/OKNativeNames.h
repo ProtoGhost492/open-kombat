@@ -2,12 +2,19 @@
 
 #include "CoreMinimal.h"
 
-/** Names for script natives, from the RE notes (registry.json + native-names.tsv). */
+/**
+ * Script natives' modules and names. The registry (a native id's module id -> its module number, which the native
+ * table is keyed by) comes from the game's executable; the names, for logs and disassembly, from the RE notes'
+ * native-names.tsv when there is one.
+ */
 class OPENKOMBAT_API FOKNativeNames
 {
 public:
-	/** Loads both tables. On failure, returns false and says why in OutError. */
-	bool Load(const FString& RegistryPath, const FString& NamesPath, FString& OutError);
+	/** Reads the registry from MKKE.exe: its 253-entry module table (0xDF5D88), each entry pointing at the module's id. */
+	bool LoadRegistry(const FString& ExePath, FString& OutError);
+
+	/** Reads native-names.tsv (native, name, confidence, note). Returns false if there's no such file. */
+	bool LoadNames(const FString& NamesPath);
 
 	/** e.g. "set_attack_block_a", or "n137.249" when the native has no name yet. */
 	FString NameFor(uint32 NativeId) const;

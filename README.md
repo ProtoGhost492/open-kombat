@@ -36,8 +36,10 @@ camera, the AI, sound, particles and cinemas.
 2. Install MKKE (Steam). OpenKombat looks for it at
    `C:/Program Files (x86)/Steam/steamapps/common/MortalKombat_KompleteEdition`. Set the `ok.GameDir` console
    variable if yours is somewhere else.
-3. Put the game's extracted scripts (`.mko`) in `<Documents>/OpenKombatData/mko`, with `registry.json` and
-   `native-names.tsv` one folder up, or set `ok.MkoDir`. These come from your own install; don't commit them.
+3. Nothing needs extracting. At start-up OpenKombat reads the game's scripts from its packages (about two seconds)
+   and the native registry from `MKKE.exe`. Optional: set `ok.MkoDir` to a folder of extracted `.mko` files to
+   load those instead, and put a `native-names.tsv` (native, name, confidence, note) in
+   `<Documents>/OpenKombatData` to see native names in logs instead of numbers.
 4. `Content/` isn't in the repository: it's Epic's Third Person template, which the project uses for its default
    map and game mode (`Config/DefaultEngine.ini`). Make a Third Person (Blueprint) project with UE 5.8 and copy its
    `Content` folder in.

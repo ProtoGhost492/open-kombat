@@ -59,7 +59,7 @@ namespace
 	}
 
 	/** The texture an MK material instance uses for a parameter (e.g. DiffuseMap), or 0. */
-	int32 TextureParameter(FOKPackage& Package, int32 MaterialRef, const FString& Parameter)
+	int32 FindTextureParameter(FOKPackage& Package, int32 MaterialRef, const FString& Parameter)
 	{
 		const TArray<FOKPackageExport>& Exports = Package.GetExports();
 		TArray<uint8> Bytes;
@@ -89,7 +89,7 @@ namespace
 UMaterialInterface* OKCharacterMesh::MakeMaterial(FOKPackage& Package, int32 MaterialRef)
 {
 	UMaterialInterface* Base = BaseMaterial();
-	const int32 TextureRef = TextureParameter(Package, MaterialRef, DiffuseParameter.ToString());
+	const int32 TextureRef = FindTextureParameter(Package, MaterialRef, DiffuseParameter.ToString());
 	if (TextureRef <= 0)
 	{
 		UE_LOG(LogOKAsset, Warning, TEXT("%s: no DiffuseMap stored in this package"), *Package.ObjectPath(MaterialRef));

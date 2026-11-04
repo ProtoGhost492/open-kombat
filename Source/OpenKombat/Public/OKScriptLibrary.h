@@ -16,6 +16,13 @@ public:
 	/** Loads every .mko in Folder. Files that fail are logged and skipped. Returns the number loaded. */
 	int32 LoadFolder(const FString& Folder);
 
+	/**
+	 * Loads every script in the game's packages (*.xxx in AssetDir): each MKScriptBinary export is its properties, an
+	 * int32 length and the .mko itself, named after the export. A costume's package repeats its character's script;
+	 * the first package in name order wins. Returns the number loaded.
+	 */
+	int32 LoadPackages(const FString& AssetDir);
+
 	/** Points every import at its target function. Returns how many couldn't be resolved. */
 	int32 LinkAll();
 

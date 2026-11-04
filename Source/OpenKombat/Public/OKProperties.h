@@ -55,3 +55,12 @@ private:
 
 /** An FName on disk: an index into the name table, plus a number (n > 0 means "Name_<n-1>"). Sets bBad for a bad index. */
 OPENKOMBAT_API FString OKReadName(FOKByteReader& Reader, const TArray<FString>& Names, bool& bBad);
+
+namespace OKProps
+{
+	/**
+	 * An export's tags (Ref is 1-based). Subobjects that store 4 bytes before them (an index: DistributionFloatConstant_0
+	 * and the like) are read past those.
+	 */
+	OPENKOMBAT_API bool ReadObject(FOKPackage& Package, int32 Ref, FOKPropertyList& Out);
+}

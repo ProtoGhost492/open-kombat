@@ -4,6 +4,8 @@
 
 DECLARE_LOG_CATEGORY_EXTERN(LogOKAsset, Log, All);
 
+class IFileHandle;
+
 /** Where one compressed chunk's bytes go in the uncompressed package, and where they are in the file. */
 struct FOKPackageChunk
 {
@@ -68,8 +70,18 @@ public:
 	static constexpr uint32 Tag = 0x9E2A83C1;
 	static constexpr uint32 CompressLzo = 2;
 
+	FOKPackage();
+	~FOKPackage();
+
 	/** Reads the file, the summary and the tables. Null, with OutError, on failure */
 	static TUniquePtr<FOKPackage> Open(const FString& Path, FString& OutError);
+
+	/**
+	 * The same, reading only the head of the file now and each chunk when something first needs it, for scans over
+	 * many packages (the scripts' library). GetFileBytes is then only the head. Whole-file compressed packages
+	 * (Startup, Core...) are still read whole.
+	 */
+	static TUniquePtr<FOKPackage> OpenLazy(const FString& Path, FString& OutError);
 
 	const FString& GetName() const {
 		return Name;
@@ -101,6 +113,9 @@ public:
 	TArray<const FOKPackageExport*> FindExports(const FString& ClassName) const;
 	const FOKPackageExport* FindExportByPath(const FString& Path) const;
 
+	/** ok.GameDir: where MKKE is installed. */
+	static FString GameDir();
+
 	/** Opens <ok.GameDir>/DiscContentPC/Asset/<PackageName>.xxx. */
 	static TUniquePtr<FOKPackage> OpenGamePackage(const FString& PackageName, FString& OutError);
 
@@ -108,9 +123,14 @@ private:
 	bool ReadSummary(FString& OutError);
 	bool ReadTables(FString& OutError);
 	const TArray<uint8>* Chunk(int32 Index);
+	static TUniquePtr<FOKPackage> OpenFile(const FString& Path, bool bLazy, FString& OutError);
+	/** Count stored bytes at Offset: in File, or read into Scratch from the handle. Null if they aren't there. */
+	const uint8* StoredBytes(int64 Offset, int64 Count, TArray<uint8>& Scratch) const;
 
 	FString Name;
-	TArray<uint8> File;			// the whole file as stored
+	TArray<uint8> File;			// the whole file as stored, or its head when opened lazily
+	TUniquePtr<IFileHandle> Handle;	// the open file, when lazy
+	int64 FileSize = 0;
 	FOKPackageSummary Summary;
 	TArray<FString> Names;
 	TArray<FOKPackageImport> Imports;

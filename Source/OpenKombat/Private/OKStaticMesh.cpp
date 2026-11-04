@@ -8,28 +8,9 @@
 
 namespace
 {
-	/** A packed tangent component: a byte mapped to [-1, 1]. */
-	float Unpack(uint8 Byte)
-	{
-		return Byte / 127.5f - 1.0f;
-	}
-
-	FVector3f UnpackVector(const uint8* Bytes)
-	{
-		return FVector3f(Unpack(Bytes[0]), Unpack(Bytes[1]), Unpack(Bytes[2]));
-	}
-
-	/** Reads an int32 count and checks it against a limit and the bytes left (each element at least MinBytes). */
-	int32 ReadCount(FOKByteReader& R, int32 Limit, int32 MinBytes, bool& bBad)
-	{
-		const int32 Count = R.I32();
-		if (Count < 0 || Count > Limit || int64(Count) * MinBytes > R.Remaining())
-		{
-			bBad = true;
-			return 0;
-		}
-		return Count;
-	}
+	using OKBytes::Unpack;
+	using OKBytes::UnpackVector;
+	using OKBytes::ReadCount;
 
 	/**
 	 * A vertex stream: {int32 stride, int32 numVertices, int32 count, count × stride bytes}. Count may be 0 (no colours)

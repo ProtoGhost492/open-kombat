@@ -2,7 +2,9 @@
 #include "OKByteReader.h"
 #include "OKLzo.h"
 #include "OKProperties.h"
+#include "GenericPlatform/GenericPlatformFile.h"
 #include "HAL/IConsoleManager.h"
+#include "HAL/PlatformFileManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 
@@ -57,14 +59,52 @@ static bool InflateWholeFile(const TArray<uint8>& In, TArray<uint8>& Out, FStrin
 	return true;
 }
 
+FOKPackage::FOKPackage() = default;
+FOKPackage::~FOKPackage() = default;
+
 TUniquePtr<FOKPackage> FOKPackage::Open(const FString& Path, FString& OutError)
 {
+	return OpenFile(Path, false, OutError);
+}
+
+TUniquePtr<FOKPackage> FOKPackage::OpenLazy(const FString& Path, FString& OutError)
+{
+	return OpenFile(Path, true, OutError);
+}
+
+TUniquePtr<FOKPackage> FOKPackage::OpenFile(const FString& Path, bool bLazy, FString& OutError)
+{
+	// [design] The head a lazy open reads: the summary and its chunk table, and the uncompressed bytes before the name
+	// table, fit in it for every MKKE package; anything past it is read when needed.
+	constexpr int64 HeadBytes = 1 << 20;
 	TUniquePtr<FOKPackage> Package = MakeUnique<FOKPackage>();
 	Package->Name = FPaths::GetBaseFilename(Path);
-	if (!FFileHelper::LoadFileToArray(Package->File, *Path))
+	if (bLazy)
 	{
-		OutError = FString::Printf(TEXT("can't read %s"), *Path);
-		return nullptr;
+		Package->Handle.Reset(FPlatformFileManager::Get().GetPlatformFile().OpenRead(*Path));
+		Package->FileSize = Package->Handle ? Package->Handle->Size() : 0;
+		Package->File.SetNumUninitialized(FMath::Min(Package->FileSize, HeadBytes));
+		if (!Package->Handle || !Package->Handle->Read(Package->File.GetData(), Package->File.Num()))
+		{
+			OutError = FString::Printf(TEXT("can't read %s"), *Path);
+			return nullptr;
+		}
+	}
+	const bool bHeadIsWholeFile = Package->File.Num() >= 8 && FMemory::Memcmp(Package->File.GetData(), &Tag, 4) == 0
+		&& Package->File[4] == 0 && Package->File[5] == 0 && Package->File[6] == 2 && Package->File[7] == 0;
+	if (bLazy && Package->FileSize <= Package->File.Num())
+	{
+		Package->Handle.Reset();		// the head is the whole file
+	}
+	else if (!bLazy || bHeadIsWholeFile)
+	{
+		Package->Handle.Reset();
+		if (!FFileHelper::LoadFileToArray(Package->File, *Path))
+		{
+			OutError = FString::Printf(TEXT("can't read %s"), *Path);
+			return nullptr;
+		}
+		Package->FileSize = Package->File.Num();
 	}
 	// Whole-file compressed: the file starts with a chunk header (tag, then the 0x20000 block size).
 	if (Package->File.Num() >= 8 && FMemory::Memcmp(Package->File.GetData(), &Tag, 4) == 0
@@ -77,6 +117,7 @@ TUniquePtr<FOKPackage> FOKPackage::Open(const FString& Path, FString& OutError)
 			return nullptr;
 		}
 		Package->File = MoveTemp(Inflated);
+		Package->FileSize = Package->File.Num();
 	}
 	if (!Package->ReadSummary(OutError) || !Package->ReadTables(OutError))
 	{
@@ -156,7 +197,7 @@ int64 FOKPackage::GetUncompressedSize() const
 {
 	if (Summary.Chunks.Num() == 0)
 	{
-		return File.Num();
+		return FileSize;
 	}
 	int64 End = 0;
 	for (const FOKPackageChunk& C : Summary.Chunks)
@@ -174,14 +215,16 @@ const TArray<uint8>* FOKPackage::Chunk(int32 Index)
 	{
 		return &Out;		// already done
 	}
-	if (C.CompressedOffset < 0 || int64(C.CompressedOffset) + C.CompressedSize > File.Num())
+	TArray<uint8> Stored;
+	const uint8* StoredData = (C.CompressedOffset < 0 || C.CompressedSize < 0) ? nullptr : StoredBytes(C.CompressedOffset, C.CompressedSize, Stored);
+	if (!StoredData)
 	{
 		UE_LOG(LogOKAsset, Error, TEXT("%s: chunk %d lies outside the file"), *Name, Index);
 			return nullptr;
 	}
 
 	// Chunk header: tag, block size, compressed size, uncompressed size; then (compressed, uncompressed) per block.
-	FOKByteReader R(TConstArrayView<uint8>(File.GetData() + C.CompressedOffset, C.CompressedSize));
+	FOKByteReader R(TConstArrayView<uint8>(StoredData, C.CompressedSize));
 	const uint32 ChunkTag = R.U32();
 	const int32 BlockSize = R.I32();
 	R.Skip(4);
@@ -243,11 +286,13 @@ bool FOKPackage::Read(int64 Offset, int32 Length, TArray<uint8>& Out)
 	const int64 End = Offset + Length;
 	if (Summary.Chunks.Num() == 0)
 	{
-		if (End > File.Num())
+		TArray<uint8> Stored;
+		const uint8* Data = StoredBytes(Offset, Length, Stored);
+		if (!Data)
 		{
 			return false;
 		}
-		FMemory::Memcpy(Out.GetData(), File.GetData() + Offset, Length);
+		FMemory::Memcpy(Out.GetData(), Data, Length);
 		return true;
 	}
 
@@ -256,7 +301,13 @@ bool FOKPackage::Read(int64 Offset, int32 Length, TArray<uint8>& Out)
 	{
 		// Everything before the name table is stored uncompressed, at the same offsets.
 		const int64 Count = FMath::Min<int64>(End, Summary.NameOffset) - Offset;
-		FMemory::Memcpy(Out.GetData(), File.GetData() + Offset, Count);
+		TArray<uint8> Stored;
+		const uint8* Data = StoredBytes(Offset, Count, Stored);
+		if (!Data)
+		{
+			return false;
+		}
+		FMemory::Memcpy(Out.GetData(), Data, Count);
 		Filled += Count;
 	}
 	for (int32 i = 0; i < Summary.Chunks.Num() && Filled < Length; ++i)
@@ -279,6 +330,24 @@ bool FOKPackage::Read(int64 Offset, int32 Length, TArray<uint8>& Out)
 		Filled += To - From;
 	}
 	return Filled == Length;
+}
+
+const uint8* FOKPackage::StoredBytes(int64 Offset, int64 Count, TArray<uint8>& Scratch) const
+{
+	if (Offset < 0 || Count < 0 || Offset + Count > FileSize)
+	{
+		return nullptr;
+	}
+	if (Offset + Count <= File.Num())
+	{
+		return File.GetData() + Offset;
+	}
+	Scratch.SetNumUninitialized(Count);
+	if (!Handle || !Handle->Seek(Offset) || !Handle->Read(Scratch.GetData(), Count))
+	{
+		return nullptr;
+	}
+	return Scratch.GetData();
 }
 
 bool FOKPackage::ReadTables(FString& OutError)
@@ -425,9 +494,14 @@ static TAutoConsoleVariable<FString> CVarGameDir(
 	TEXT("C:/Program Files (x86)/Steam/steamapps/common/MortalKombat_KompleteEdition"),
 	TEXT("Where MKKE is installed. Packages are read from <GameDir>/DiscContentPC/Asset."));
 
+FString FOKPackage::GameDir()
+{
+	return CVarGameDir.GetValueOnGameThread();
+}
+
 TUniquePtr<FOKPackage> FOKPackage::OpenGamePackage(const FString& PackageName, FString& OutError)
 {
-	return Open(FPaths::Combine(CVarGameDir.GetValueOnGameThread(), TEXT("DiscContentPC/Asset"), PackageName + TEXT(".xxx")), OutError);
+	return Open(FPaths::Combine(GameDir(), TEXT("DiscContentPC/Asset"), PackageName + TEXT(".xxx")), OutError);
 }
 
 static FAutoConsoleCommand CmdPkgInfo(

@@ -1,4 +1,7 @@
 #include "OkScriptLibrary.h"
+#include "OKByteReader.h"
+#include "OKPackage.h"
+#include "OKProperties.h"
 #include "HAL/FileManager.h"
 #include "HAL/IConsoleManager.h"
 #include "HAL/PlatformTime.h"
@@ -23,6 +26,45 @@ int32 FOKScriptLibrary::LoadFolder(const FString& Folder)
 			continue;
 		}
 		Scripts.Add(FileName, MoveTemp(File));
+	}
+	return Scripts.Num();
+}
+
+int32 FOKScriptLibrary::LoadPackages(const FString& AssetDir)
+{
+	TArray<FString> Files;
+	IFileManager::Get().FindFiles(Files, *FPaths::Combine(AssetDir, TEXT("*.xxx")), /*Files*/ true, /*Dirs*/ false);
+	Files.Sort();
+	for (const FString& FileName : Files)
+	{
+		FString Error;
+		TUniquePtr<FOKPackage> Package = FOKPackage::OpenLazy(FPaths::Combine(AssetDir, FileName), Error);
+		if (!Package)
+		{
+			continue;		// engine packages OpenKombat can't read hold no scripts
+		}
+		for (const FOKPackageExport* Export : Package->FindExports(TEXT("MKScriptBinary")))
+		{
+			const FString ScriptName = Export->Name + TEXT(".mko");
+			TArray<uint8> Data;
+			if (Scripts.Contains(ScriptName) || Export->Name.StartsWith(TEXT("Default__")) || !Package->ExportData(*Export, Data))
+			{
+				continue;
+			}
+			FOKByteReader Reader(Data);
+			FOKPropertyList Properties;
+			Properties.Read(Reader, Package->GetNames());
+			const int32 Length = Reader.I32();
+			const uint8* Body = Reader.Take(Length);
+			TUniquePtr<FOKMkoFile> File = MakeUnique<FOKMkoFile>();
+			if (!Body || !File->LoadFromBytes(TArray<uint8>(Body, Length), ScriptName, Error))
+			{
+				UE_LOG(LogOKLibrary, Warning, TEXT("Skipping %s in %s: %s"), *ScriptName, *FileName, Body ? *Error : TEXT("no script body"));
+				++Skipped;
+				continue;
+			}
+			Scripts.Add(ScriptName, MoveTemp(File));
+		}
 	}
 	return Scripts.Num();
 }
@@ -69,16 +111,20 @@ void FOKScriptLibrary::ForEachScript(TFunctionRef<void(const FOKMkoFile&)> Visit
 
 static FAutoConsoleCommand CmdMkoLinkAll(
 	TEXT("ok.Mko.LinkAll"),
-	TEXT("Load every script in ok.Mko.Dir and link their cross-script calls."),
+	TEXT("Load every script (from the game's packages, or ok.MkoDir) and link their cross-script calls."),
 	FConsoleCommandDelegate::CreateLambda([]()
 		{
-			// ok.MkoDir is defined in OKMkoFile.cpp; look it up by name.
-			IConsoleVariable* DirVar = IConsoleManager::Get().FindConsoleVariable(TEXT("ok.MkoDir"));
-			const FString Folder = DirVar ? DirVar->GetString() : FString();
-
+			const FString Folder = FOKMkoFile::ScriptDir();
 			const double StartSeconds = FPlatformTime::Seconds();
 			FOKScriptLibrary Library;
-			Library.LoadFolder(Folder);
+			if (Folder.IsEmpty())
+			{
+				Library.LoadPackages(FPaths::Combine(FOKPackage::GameDir(), TEXT("DiscContentPC/Asset")));
+			}
+			else
+			{
+				Library.LoadFolder(Folder);
+			}
 			const int32 Unresolved = Library.LinkAll();
 			const double Milliseconds = (FPlatformTime::Seconds() - StartSeconds) * 1000.0;
 

@@ -33,7 +33,7 @@ namespace
 	constexpr double ThrowRange = 120.0;
 
 	// OKInput masks
-	constexpr uint32 Up = 1, Down = 2, Block = 0x8000, Throw = 0x2000;
+	constexpr uint32 MaskUp = 1, MaskDown = 2, MaskBlock = 0x8000, MaskThrow = 0x2000;
 	constexpr uint32 Buttons[] = { 0x40, 0x10, 0x20, 0x80 };	// FP BP FK BK
 
 	/** A command record's motion step as a mask: towards, away, up, down (OKInput::MatchMotionAt's codes); 0 for others. */
@@ -43,8 +43,8 @@ namespace
 		{
 		case 0x80000001: case 0x8000000D: return Towards;
 		case 0x80000002: case 0x8000000E: return Away;
-		case 0x80000003: return Up;
-		case 0x80000004: return Down;
+		case 0x80000003: return MaskUp;
+		case 0x80000004: return MaskDown;
 		default: return 0;
 		}
 	}
@@ -156,7 +156,7 @@ void FOKFightAI::PlanAttack(FOKScriptRuntime& Runtime, const FOKFighter& Me, dou
 	const bool bTrace = CVarAITrace.GetValueOnGameThread() != 0;
 	if (CVarAIThrows.GetValueOnGameThread() != 0 && Separation < ThrowRange && Roll(Table(ETable::Throw)))
 	{
-		Plan({ { Throw, 2 }, { 0, 12 } });
+		Plan({ { MaskThrow, 2 }, { 0, 12 } });
 		if (bTrace) { UE_LOG(LogOKVM, Log, TEXT("AI: throw")); }
 		return;
 	}
@@ -165,7 +165,7 @@ void FOKFightAI::PlanAttack(FOKScriptRuntime& Runtime, const FOKFighter& Me, dou
 		return;
 	}
 	const uint32 Button = Buttons[Random.RandRange(0, UE_ARRAY_COUNT(Buttons) - 1)];
-	const uint32 Low = Roll(Table(ETable::LowAttack)) ? Down : 0;
+	const uint32 Low = Roll(Table(ETable::LowAttack)) ? MaskDown : 0;
 	Plan({ { Low | Button, 2 }, { Low, 8 } });
 	if (bTrace) { UE_LOG(LogOKVM, Log, TEXT("AI: attack %X%s"), Button, Low ? TEXT(" low") : TEXT("")); }
 }
@@ -207,7 +207,7 @@ uint32 FOKFightAI::Think(FOKScriptRuntime& Runtime, FOKFighter& Me, FOKFighter& 
 	if (Frame < BlockingUntil || (bHeAttacks && BlockingUntil != 0 && Frame < BlockingUntil + 30))
 	{
 		bJustBlocked = true;
-		return Block;
+		return MaskBlock;
 	}
 	if (bJustBlocked)
 	{

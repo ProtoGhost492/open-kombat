@@ -61,11 +61,14 @@ struct FOKMkoImport
 class OPENKOMBAT_API FOKMkoFile
 {
 public:
-	/** The folder holding the extracted .mko scripts: ok.MkoDir, or <Documents>/OpenKombatData/mko when that is empty. */
+	/** ok.MkoDir: a folder of extracted .mko scripts to load instead of the game's packages. Empty (the default) means the packages. */
 	static FString ScriptDir();
 
 	/** Reads and checks a .mko file. On failure, returns false and says why in OutError. */
 	bool Load(const FString& Path, FString& OutError);
+
+	/** The same for a script already in memory (an MKScriptBinary's body), named FileName ("CHAR_Scorpion.mko"). */
+	bool LoadFromBytes(TArray<uint8>&& InBytes, const FString& FileName, FString& OutError);
 
 	/** File name, e.g. "CHAR_Scorpion.mko". */
 

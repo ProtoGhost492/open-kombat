@@ -1,5 +1,6 @@
 #include "OKScriptSubsystem.h"
 #include "OKMkoFile.h"
+#include "OKPackage.h"
 #include "Engine/Engine.h"
 #include "HAL/IConsoleManager.h"
 #include "HAL/PlatformTime.h"
@@ -21,29 +22,40 @@ void UOKScriptSubsystem::Deinitialize()
 
 void UOKScriptSubsystem::Reload()
 {
+	// The scripts come from the game's packages, or from ok.MkoDir when it names a folder of extracted ones.
 	const FString Folder = FOKMkoFile::ScriptDir();
+	const FString GameDir = FOKPackage::GameDir();
 
-	// The name tables sit one folder up from the scripts: OpenKombatData/registry.json, OpenKombatData/native-names.tsv
-
-	const FString DataDir = FPaths::GetPath(Folder);
-	FString NamesError;
-	if (NativeNames.Load(FPaths::Combine(DataDir, TEXT("registry.json")), FPaths::Combine(DataDir, TEXT("native-names.tsv")), NamesError))
+	// The registry, which native dispatch needs, comes from the game's executable. The names are only for logs: the
+	// RE notes' native-names.tsv, one folder up from ok.MkoDir, or in <Documents>/OpenKombatData.
+	FString RegistryError;
+	if (!NativeNames.LoadRegistry(FPaths::Combine(GameDir, TEXT("DiscContentPC/MKKE.exe")), RegistryError))
 	{
-		UE_LOG(LogOKScripts, Log, TEXT("Native names: %d modules, %d named natives"), NativeNames.NumModules(), NativeNames.NumNames());
+		UE_LOG(LogOKScripts, Error, TEXT("No native registry (%s): scripts can't call natives. Set ok.GameDir to your MKKE install."), *RegistryError);
 	}
-	else
+	const FString DataDir = Folder.IsEmpty() ? FPaths::Combine(FPlatformProcess::UserDir(), TEXT("OpenKombatData")) : FPaths::GetPath(Folder);
+	if (!NativeNames.LoadNames(FPaths::Combine(DataDir, TEXT("native-names.tsv"))))
 	{
-		UE_LOG(LogOKScripts, Warning, TEXT("Native names not loaded (%s); natives will show as numbers"), *NamesError);
+		UE_LOG(LogOKScripts, Log, TEXT("No native-names.tsv in %s; natives show as numbers"), *DataDir);
 	}
+	UE_LOG(LogOKScripts, Log, TEXT("Native registry: %d modules, %d named natives"), NativeNames.NumModules(), NativeNames.NumNames());
 
 	const double StartSeconds = FPlatformTime::Seconds();
 	TUniquePtr<FOKScriptLibrary> NewLibrary = MakeUnique<FOKScriptLibrary>();
-	NewLibrary->LoadFolder(Folder);
+	const FString Source = Folder.IsEmpty() ? FPaths::Combine(GameDir, TEXT("DiscContentPC/Asset")) : Folder;
+	if (Folder.IsEmpty())
+	{
+		NewLibrary->LoadPackages(Source);
+	}
+	else
+	{
+		NewLibrary->LoadFolder(Folder);
+	}
 	const int32 Unresolved = NewLibrary->LinkAll();
 	Library = MoveTemp(NewLibrary); // swap in only once it's fully built
 
 	UE_LOG(LogOKScripts, Log, TEXT("Script library: %d scripts from %s in %.0f ms, %d unresolved calls"),
-		Library->NumScripts(), *Folder, (FPlatformTime::Seconds() - StartSeconds) * 1000.0, Unresolved);
+		Library->NumScripts(), *Source, (FPlatformTime::Seconds() - StartSeconds) * 1000.0, Unresolved);
 }
 
 // --- Console tools ----------------------------------------------

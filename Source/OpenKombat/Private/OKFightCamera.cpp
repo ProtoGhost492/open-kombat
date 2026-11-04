@@ -13,7 +13,7 @@ namespace
 	constexpr double EdgeInset = 100.0;			// the focus stays this far inside the arena's ends
 	constexpr double EyeHeight = 150.0;
 	constexpr double LookHeight = 110.0;
-	constexpr float Degrees = 45.0f;
+	constexpr float FieldOfViewDegrees = 45.0f;
 
 	// MKKE's rates (FUN_00876F40 for the eye, FUN_0086BB70 for the view): a fraction of the way to the goal each frame,
 	// more the further the view is off its goal, up to variable 60's angle. The eye travels slowly (variable 52, plus 55
@@ -79,7 +79,7 @@ void FOKFightCamera::Update(const FOKScriptRuntime& Runtime, const FInput& Input
 		Along = FMath::Clamp(Along, EdgeInset, Input.LineLength - EdgeInset);
 	}
 	const FVector GoalFocus = Middle + Right * (Along - FVector::DotProduct(Middle - Input.LineStart, Right));
-	const double HalfWidth = FMath::Tan(FMath::DegreesToRadians(Degrees * 0.5));
+	const double HalfWidth = FMath::Tan(FMath::DegreesToRadians(FieldOfViewDegrees * 0.5));
 	const double GoalDistance = FMath::Clamp((Separation * 0.5 + FramingMargin) / HalfWidth, NearDistance, FarDistance);
 
 	const FVector GoalTarget = Middle + FVector(0.0, 0.0, LookHeight);
@@ -108,7 +108,7 @@ void FOKFightCamera::Update(const FOKScriptRuntime& Runtime, const FInput& Input
 
 	Eye = Focus - Forward * Distance + FVector(0.0, 0.0, EyeHeight);
 	Rotation = (Target - Eye).Rotation();
-	FieldOfView = Degrees;
+	FieldOfView = FieldOfViewDegrees;
 
 	// The shake scripts put on the camera object (CameraEngine.p_screen_shaker -> 149.23): a move of the eye, and a turn
 	// in UE3 rotator units (65536 a turn) [inf], as MKKE's tick adds them (FUN_008789D0)
